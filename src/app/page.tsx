@@ -1,101 +1,261 @@
-import Image from "next/image";
+'use client'
+
+import { useState, useEffect } from 'react'
+import Image from 'next/image'
+import { useLocale } from '@/i18n/context'
+import { LanguageSwitch } from '@/components/LanguageSwitch'
+
+interface ProtocolConfig {
+  host: string
+  port: number
+  secure: boolean
+  username: string
+  encryption: string
+  insecure?: boolean
+}
+
+interface DetailedEmailConfig {
+  imap: ProtocolConfig | null
+  smtp: ProtocolConfig | null
+  pop3: ProtocolConfig | null
+  ews: ProtocolConfig | null
+  eas: ProtocolConfig | null
+}
+
+const EmailProviderIcons = () => (
+  <div className="flex justify-center gap-6 mb-12">
+    <div className="w-10 h-10">
+      <Image
+        src="/icons/office.svg"
+        alt="Microsoft Office"
+        width={40}
+        height={40}
+        priority
+      />
+    </div>
+    <div className="w-10 h-10">
+      <Image
+        src="/icons/outlook.svg"
+        alt="Microsoft Outlook"
+        width={40}
+        height={40}
+        priority
+      />
+    </div>
+    <div className="w-10 h-10">
+      <Image
+        src="/icons/exchange.svg"
+        alt="Microsoft Exchange"
+        width={40}
+        height={40}
+        priority
+      />
+    </div>
+    <div className="w-10 h-10">
+      <Image
+        src="/icons/gmail.svg"
+        alt="Gmail"
+        width={40}
+        height={40}
+        priority
+      />
+    </div>
+    <div className="w-10 h-10">
+      <Image
+        src="/icons/icloud.svg"
+        alt="iCloud"
+        width={40}
+        height={40}
+        priority
+      />
+    </div>
+    <div className="w-10 h-10">
+      <Image
+        src="/icons/yahoo.svg"
+        alt="Yahoo"
+        width={40}
+        height={40}
+        priority
+      />
+    </div>
+  </div>
+)
+
+function getEncryptionType(protocol: ProtocolConfig) {
+  if (protocol.encryption === 'ssl') return 'ssl'
+  if (protocol.encryption === 'starttls') return 'starttls'
+  return 'none'
+}
+
+function ProtocolConfig({
+  config,
+  title,
+  t,
+}: {
+  config: ProtocolConfig
+  title: string
+  t: any
+}) {
+  return (
+    <div className="p-6 border rounded-lg">
+      <h2 className="text-xl font-semibold mb-4">{title}</h2>
+      <dl className="grid grid-cols-2 gap-4">
+        <dt className="font-medium">{t.fields.host}:</dt>
+        <dd>{config.host}</dd>
+        <dt className="font-medium">{t.fields.port}:</dt>
+        <dd>{config.port}</dd>
+        <dt className="font-medium">{t.fields.encryption}:</dt>
+        <dd>{t.encryption[getEncryptionType(config)]}</dd>
+        <dt className="font-medium">{t.fields.authentication}:</dt>
+        <dd>
+          {config.insecure
+            ? t.authentication.insecure
+            : t.authentication.secure}
+        </dd>
+        <dt className="font-medium">{t.fields.username}:</dt>
+        <dd>{config.username}</dd>
+      </dl>
+    </div>
+  )
+}
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const { t } = useLocale()
+  const [email, setEmail] = useState('')
+  const [config, setConfig] = useState<DetailedEmailConfig | null>(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [rawResponse, setRawResponse] = useState<string>('')
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  // 使用防抖进行自动查询
+  useEffect(() => {
+    if (!email) {
+      setConfig(null)
+      setRawResponse('')
+      return
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        setError('')
+        setLoading(true)
+        setRawResponse('')
+
+        const response = await fetch('/api/email-config', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email }),
+        })
+
+        const data = await response.json()
+
+        // 保存原始响应
+        setRawResponse(JSON.stringify(data.original, null, 2))
+
+        if (!response.ok) {
+          throw new Error(data.error)
+        }
+
+        setConfig(data.formatted)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '查询失败')
+      } finally {
+        setLoading(false)
+      }
+    }, 500) // 500ms 的防抖延迟
+
+    return () => clearTimeout(timer)
+  }, [email])
+
+  return (
+    <div className="min-h-screen p-8">
+      <LanguageSwitch />
+      <div className="max-w-2xl mx-auto">
+        <div className="text-center mb-16">
+          <EmailProviderIcons />
+          <h1 className="text-3xl font-bold mb-6">{t.title}</h1>
+          <h2 className="text-xl text-gray-600 dark:text-gray-400 mb-8">
+            {t.subtitle}
+          </h2>
+          <p className="text-sm text-gray-500 dark:text-gray-500 max-w-lg mx-auto">
+            {t.description}
+          </p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+
+        <div className="mb-8">
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder={t.inputPlaceholder}
+            className="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-background"
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        </div>
+
+        {loading && (
+          <div className="text-center text-gray-500">{t.loading}</div>
+        )}
+
+        {error && (
+          <div className="p-4 mb-4 text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg">
+            {error}
+          </div>
+        )}
+
+        {config && (
+          <div className="space-y-6">
+            {config.imap && (
+              <ProtocolConfig
+                config={config.imap}
+                title={t.protocols.imap}
+                t={t}
+              />
+            )}
+
+            {config.smtp && (
+              <ProtocolConfig
+                config={config.smtp}
+                title={t.protocols.smtp}
+                t={t}
+              />
+            )}
+
+            {config.pop3 && (
+              <ProtocolConfig
+                config={config.pop3}
+                title={t.protocols.pop3}
+                t={t}
+              />
+            )}
+
+            {config.ews && (
+              <ProtocolConfig
+                config={config.ews}
+                title={t.protocols.ews}
+                t={t}
+              />
+            )}
+
+            {config.eas && (
+              <ProtocolConfig
+                config={config.eas}
+                title={t.protocols.eas}
+                t={t}
+              />
+            )}
+
+            {/* 显示原始响应 */}
+            <div className="p-6 border rounded-lg">
+              <h2 className="text-xl font-semibold mb-4">{t.rawResponse}</h2>
+              <pre className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg overflow-x-auto text-sm">
+                {rawResponse}
+              </pre>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
-  );
+  )
 }
